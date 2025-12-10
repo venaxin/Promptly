@@ -19,9 +19,11 @@ enum GeminiError: Error, LocalizedError {
 
 struct GeminiClient {
 
-    let model: String = "gemini-2.5-flash"   // adjust if you're using a different model
+    let model: String = "gemini-2.5-flash"
 
-    func improvePrompt(raw: String, completion: @escaping (Result<String, Error>) -> Void) {
+    func improvePrompt(raw: String,
+                       style: String,
+                       completion: @escaping (Result<String, Error>) -> Void) {
         guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
               !apiKey.isEmpty else {
             completion(.failure(GeminiError.missingAPIKey))
@@ -40,6 +42,18 @@ struct GeminiClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        let styleInstruction: String
+        switch style {
+        case "Concise":
+            styleInstruction = "Make the rewritten prompt as concise and minimal as possible while keeping all constraints."
+        case "Detailed":
+            styleInstruction = "Expand structure and clarify assumptions; prefer detailed bullet points and explicit constraints."
+        case "Code Helper":
+            styleInstruction = "Optimize the prompt for coding help (e.g. Python/Swift/TypeScript). Emphasize examples, edge cases, and clear input/output expectations."
+        default:
+            styleInstruction = "Use a neutral, clear style that balances structure and brevity."
+        }
+
         let prompt = """
         You are an expert prompt engineer for large language models.
 
@@ -47,6 +61,9 @@ struct GeminiClient {
         - Clear and unambiguous
         - Well-structured (with bullet points / sections where helpful)
         - Optimized for another AI assistant (like ChatGPT) to answer
+
+        Style preference:
+        \(styleInstruction)
 
         Keep the original intent, constraints, and important details.
         DO NOT answer the prompt.
@@ -80,11 +97,9 @@ struct GeminiClient {
                 return
             }
 
-            // 🔍 Debug log: see the raw response in Xcode console
+            // Optional debug log
             if let debugString = String(data: data, encoding: .utf8) {
                 print("Gemini raw response:\n\(debugString)")
-            } else {
-                print("Gemini raw response: <non-UTF8 data, length=\(data.count)>")
             }
 
             do {
@@ -94,7 +109,6 @@ struct GeminiClient {
                     return
                 }
 
-                // 1) If there is an "error" object, surface that message
                 if let errorDict = json["error"] as? [String: Any],
                    let message = errorDict["message"] as? String {
                     let apiError = NSError(
@@ -106,7 +120,6 @@ struct GeminiClient {
                     return
                 }
 
-                // 2) Normal success path: parse candidates → content → parts → text
                 guard let candidates = json["candidates"] as? [[String: Any]] else {
                     completion(.failure(GeminiError.badResponse))
                     return

@@ -88,9 +88,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
     private func ensureChatPanel() {
         if chatPanel != nil { return }
 
-        let panelSize = NSSize(width: 280, height: 220)
+        let panelSize = NSSize(width: 380, height: 220)
 
-        // ⬇️ Use ChatPanelWindow, KEEP .nonactivatingPanel so visibility stays as you liked
+        // Using ChatPanelWindow, KEEP .nonactivatingPanel so visibility stays as you liked
         chatPanel = ChatPanelWindow(
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
