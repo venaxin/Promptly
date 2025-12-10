@@ -9,15 +9,19 @@ class ChatPanelView: NSView {
     private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
 
     private let stylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let manageStylesButton = NSButton(title: "Manage", target: nil, action: nil)
     private let autoCopyCheckbox = NSButton(checkboxWithTitle: "Auto-copy after Improve", target: nil, action: nil)
     private let historyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
 
     private let gemini = GeminiClient()
 
+    // Called by the "Manage" button; AppDelegate will inject a closure
+    var onManageStyles: (() -> Void)?
+
     private struct HistoryItem {
         let input: String
         let output: String
-        let style: String
+        let styleName: String
     }
 
     private var history: [HistoryItem] = [] {
@@ -32,6 +36,10 @@ class ChatPanelView: NSView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func commonInit() {
@@ -63,7 +71,7 @@ class ChatPanelView: NSView {
 
         // Buttons
         improveButton.target = self
-        improveButton.action = #selector(improvePrompt)
+        improveButton.action = #selector(improvePromptAction)
         improveButton.bezelStyle = .rounded
         improveButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -74,13 +82,14 @@ class ChatPanelView: NSView {
 
         // Style popup
         stylePopup.translatesAutoresizingMaskIntoConstraints = false
-        stylePopup.addItems(withTitles: [
-            "Default",
-            "Concise",
-            "Detailed",
-            "Code Helper"
-        ])
-        stylePopup.selectItem(withTitle: "Default")
+        reloadStylesPopup()
+
+        // Manage styles button
+        manageStylesButton.target = self
+        manageStylesButton.action = #selector(manageStylesTapped)
+        manageStylesButton.bezelStyle = .rounded
+        manageStylesButton.font = NSFont.systemFont(ofSize: 11)
+        manageStylesButton.translatesAutoresizingMaskIntoConstraints = false
 
         // Auto-copy checkbox
         autoCopyCheckbox.target = self
@@ -96,6 +105,7 @@ class ChatPanelView: NSView {
 
         addSubview(inputScroll)
         addSubview(stylePopup)
+        addSubview(manageStylesButton)
         addSubview(autoCopyCheckbox)
         addSubview(improveButton)
         addSubview(historyPopup)
@@ -112,6 +122,10 @@ class ChatPanelView: NSView {
             // Style popup (left)
             stylePopup.topAnchor.constraint(equalTo: inputScroll.bottomAnchor, constant: 6),
             stylePopup.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+
+            // Manage button next to style
+            manageStylesButton.centerYAnchor.constraint(equalTo: stylePopup.centerYAnchor),
+            manageStylesButton.leadingAnchor.constraint(equalTo: stylePopup.trailingAnchor, constant: 6),
 
             // Auto-copy (right)
             autoCopyCheckbox.centerYAnchor.constraint(equalTo: stylePopup.centerYAnchor),
@@ -136,6 +150,32 @@ class ChatPanelView: NSView {
             outputScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             outputScroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
         ])
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(stylesUpdated),
+            name: .promptStylesUpdated,
+            object: nil
+        )
+    }
+
+    // MARK: - Styles
+
+    private func reloadStylesPopup() {
+        stylePopup.removeAllItems()
+        let names = PromptStyleManager.shared.styles.map { $0.name }
+        stylePopup.addItems(withTitles: names)
+        if let first = names.first {
+            stylePopup.selectItem(withTitle: first)
+        }
+    }
+
+    @objc private func stylesUpdated() {
+        reloadStylesPopup()
+    }
+
+    @objc private func manageStylesTapped() {
+        onManageStyles?()
     }
 
     // MARK: - History
@@ -148,15 +188,15 @@ class ChatPanelView: NSView {
             let preview = item.output
                 .replacingOccurrences(of: "\n", with: " ")
                 .prefix(30)
-            let title = "\(index + 1): [\(item.style)] \(preview)"
+            let title = "\(index + 1): [\(item.styleName)] \(preview)"
             historyPopup.addItem(withTitle: String(title))
         }
 
         historyPopup.selectItem(at: 0)
     }
 
-    private func addHistoryEntry(input: String, output: String, style: String) {
-        let item = HistoryItem(input: input, output: output, style: style)
+    private func addHistoryEntry(input: String, output: String, styleName: String) {
+        let item = HistoryItem(input: input, output: output, styleName: styleName)
         history.insert(item, at: 0)
         if history.count > 10 {
             history.removeLast()
@@ -171,7 +211,7 @@ class ChatPanelView: NSView {
         inputTextView.string = item.input
         outputTextView.string = item.output
 
-        if let styleItem = stylePopup.item(withTitle: item.style) {
+        if let styleItem = stylePopup.item(withTitle: item.styleName) {
             stylePopup.select(styleItem)
         }
     }
@@ -179,7 +219,7 @@ class ChatPanelView: NSView {
     // MARK: - Actions
 
     @objc private func autoCopyToggled(_ sender: NSButton) {
-        // no-op: we read state in improvePrompt
+        // we just read state in improvePromptAction
     }
 
     @objc private func copyOutput() {
@@ -191,7 +231,7 @@ class ChatPanelView: NSView {
         pb.setString(text, forType: .string)
     }
 
-    @objc private func improvePrompt() {
+    @objc private func improvePromptAction() {
         let original = inputTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !original.isEmpty else {
@@ -199,14 +239,23 @@ class ChatPanelView: NSView {
             return
         }
 
-        let selectedStyle = stylePopup.titleOfSelectedItem ?? "Default"
+        let allStyles = PromptStyleManager.shared.styles
+        guard let selectedName = stylePopup.titleOfSelectedItem,
+              let style = allStyles.first(where: { $0.name == selectedName }) else {
+            outputTextView.string = "Error: Selected style not found."
+            return
+        }
 
         improveButton.isEnabled = false
         let oldTitle = improveButton.title
         improveButton.title = "Improving..."
         outputTextView.string = "Calling Gemini…"
 
-        gemini.improvePrompt(raw: original, style: selectedStyle) { [weak self] result in
+        gemini.improvePrompt(
+            raw: original,
+            styleName: style.name,
+            styleInstruction: style.instruction
+        ) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
 
@@ -217,10 +266,12 @@ class ChatPanelView: NSView {
                 case .success(let rewritten):
                     self.outputTextView.string = rewritten
 
-                    // Add to history
-                    self.addHistoryEntry(input: original, output: rewritten, style: selectedStyle)
+                    self.addHistoryEntry(
+                        input: original,
+                        output: rewritten,
+                        styleName: style.name
+                    )
 
-                    // Auto-copy if enabled
                     if self.autoCopyCheckbox.state == .on {
                         let pb = NSPasteboard.general
                         pb.clearContents()

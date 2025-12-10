@@ -34,15 +34,12 @@ class DraggableSnapView: NSView {
         text.draw(in: textRect, withAttributes: attrs)
     }
 
-    // MARK: - Mouse events
-
     override func mouseDown(with event: NSEvent) {
         guard let window = self.window else { return }
 
         isDragging = false
         dragStartLocation = window.convertPoint(toScreen: event.locationInWindow)
-
-//        delegate?.bubbleDragStarted()
+        // Do NOT call bubbleDragStarted here; only once we detect a real drag.
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -56,7 +53,7 @@ class DraggableSnapView: NSView {
         if abs(deltaX) > 1 || abs(deltaY) > 1 {
             if !isDragging {
                 isDragging = true
-                delegate?.bubbleDragStarted()   // now we hide chat only when a real drag begins
+                delegate?.bubbleDragStarted()
             }
         }
 
@@ -85,8 +82,6 @@ class DraggableSnapView: NSView {
             delegate?.bubbleClicked()
         }
     }
-
-    // MARK: - Snapping
 
     private func snapWindowToNearestEdge(window: NSWindow, screen: NSScreen) {
         let frame = window.frame

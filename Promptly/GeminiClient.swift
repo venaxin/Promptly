@@ -22,7 +22,8 @@ struct GeminiClient {
     let model: String = "gemini-2.5-flash"
 
     func improvePrompt(raw: String,
-                       style: String,
+                       styleName: String,
+                       styleInstruction: String,
                        completion: @escaping (Result<String, Error>) -> Void) {
         guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
               !apiKey.isEmpty else {
@@ -42,18 +43,6 @@ struct GeminiClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let styleInstruction: String
-        switch style {
-        case "Concise":
-            styleInstruction = "Make the rewritten prompt as concise and minimal as possible while keeping all constraints."
-        case "Detailed":
-            styleInstruction = "Expand structure and clarify assumptions; prefer detailed bullet points and explicit constraints."
-        case "Code Helper":
-            styleInstruction = "Optimize the prompt for coding help. Emphasize examples, edge cases, and clear input/output expectations."
-        default:
-            styleInstruction = "Use a neutral, clear style that balances structure and brevity."
-        }
-
         let prompt = """
         You are an expert prompt engineer for large language models.
 
@@ -62,8 +51,8 @@ struct GeminiClient {
         - Well-structured (with bullet points / sections where helpful)
         - Optimized for another AI assistant (like ChatGPT) to answer
 
-        Style preference:
-        \(styleInstruction)
+        Style name: \(styleName)
+        Style description: \(styleInstruction)
 
         Keep the original intent, constraints, and important details.
         DO NOT answer the prompt.
@@ -97,7 +86,6 @@ struct GeminiClient {
                 return
             }
 
-            // Debug log
             if let debugString = String(data: data, encoding: .utf8) {
                 print("Gemini raw response:\n\(debugString)")
             }
@@ -109,7 +97,6 @@ struct GeminiClient {
                     return
                 }
 
-                // API error
                 if let errorDict = json["error"] as? [String: Any] {
                     let code = errorDict["code"] as? Int ?? 0
                     let status = errorDict["status"] as? String ?? ""
@@ -157,5 +144,18 @@ struct GeminiClient {
                 completion(.failure(error))
             }
         }.resume()
+    }
+
+    // Used by the Manage Styles panel to improve a style description
+    func improveStyleDescription(text: String,
+                                 completion: @escaping (Result<String, Error>) -> Void) {
+        improvePrompt(
+            raw: text,
+            styleName: "Style Description",
+            styleInstruction: """
+            Rewrite this style description so it clearly instructs an AI how to rewrite prompts in that style. Focus on clarity, bullet points where helpful, and avoid extra commentary.
+            """,
+            completion: completion
+        )
     }
 }
