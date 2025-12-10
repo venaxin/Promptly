@@ -10,8 +10,19 @@ class ChatPanelView: NSView {
 
     private let stylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let autoCopyCheckbox = NSButton(checkboxWithTitle: "Auto-copy after Improve", target: nil, action: nil)
+    private let historyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
 
     private let gemini = GeminiClient()
+
+    private struct HistoryItem {
+        let input: String
+        let output: String
+        let style: String
+    }
+
+    private var history: [HistoryItem] = [] {
+        didSet { reloadHistoryPopup() }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -77,10 +88,17 @@ class ChatPanelView: NSView {
         autoCopyCheckbox.translatesAutoresizingMaskIntoConstraints = false
         autoCopyCheckbox.state = .off
 
+        // History popup
+        historyPopup.translatesAutoresizingMaskIntoConstraints = false
+        historyPopup.target = self
+        historyPopup.action = #selector(historySelectionChanged(_:))
+        reloadHistoryPopup()
+
         addSubview(inputScroll)
         addSubview(stylePopup)
         addSubview(autoCopyCheckbox)
         addSubview(improveButton)
+        addSubview(historyPopup)
         addSubview(copyButton)
         addSubview(outputScroll)
 
@@ -95,17 +113,22 @@ class ChatPanelView: NSView {
             stylePopup.topAnchor.constraint(equalTo: inputScroll.bottomAnchor, constant: 6),
             stylePopup.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
 
-            // Auto-copy checkbox (right)
+            // Auto-copy (right)
             autoCopyCheckbox.centerYAnchor.constraint(equalTo: stylePopup.centerYAnchor),
             autoCopyCheckbox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
-            // Improve button (left, under style row)
+            // Improve button (left)
             improveButton.topAnchor.constraint(equalTo: stylePopup.bottomAnchor, constant: 6),
             improveButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
 
-            // Copy button (right, same row as Improve)
+            // Copy button (right)
             copyButton.centerYAnchor.constraint(equalTo: improveButton.centerYAnchor),
             copyButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+
+            // History popup between Improve and Copy
+            historyPopup.centerYAnchor.constraint(equalTo: improveButton.centerYAnchor),
+            historyPopup.leadingAnchor.constraint(equalTo: improveButton.trailingAnchor, constant: 6),
+            historyPopup.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -6),
 
             // Output
             outputScroll.topAnchor.constraint(equalTo: improveButton.bottomAnchor, constant: 8),
@@ -115,14 +138,54 @@ class ChatPanelView: NSView {
         ])
     }
 
+    // MARK: - History
+
+    private func reloadHistoryPopup() {
+        historyPopup.removeAllItems()
+        historyPopup.addItem(withTitle: "History")
+
+        for (index, item) in history.enumerated() {
+            let preview = item.output
+                .replacingOccurrences(of: "\n", with: " ")
+                .prefix(30)
+            let title = "\(index + 1): [\(item.style)] \(preview)"
+            historyPopup.addItem(withTitle: String(title))
+        }
+
+        historyPopup.selectItem(at: 0)
+    }
+
+    private func addHistoryEntry(input: String, output: String, style: String) {
+        let item = HistoryItem(input: input, output: output, style: style)
+        history.insert(item, at: 0)
+        if history.count > 10 {
+            history.removeLast()
+        }
+    }
+
+    @objc private func historySelectionChanged(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard index > 0, index - 1 < history.count else { return }
+
+        let item = history[index - 1]
+        inputTextView.string = item.input
+        outputTextView.string = item.output
+
+        if let styleItem = stylePopup.item(withTitle: item.style) {
+            stylePopup.select(styleItem)
+        }
+    }
+
     // MARK: - Actions
 
     @objc private func autoCopyToggled(_ sender: NSButton) {
-        // nothing to do right now; we just read sender.state later
+        // no-op: we read state in improvePrompt
     }
 
     @objc private func copyOutput() {
         let text = outputTextView.string
+        guard !text.isEmpty else { return }
+
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
@@ -154,7 +217,10 @@ class ChatPanelView: NSView {
                 case .success(let rewritten):
                     self.outputTextView.string = rewritten
 
-                    // Auto-copy if option is enabled
+                    // Add to history
+                    self.addHistoryEntry(input: original, output: rewritten, style: selectedStyle)
+
+                    // Auto-copy if enabled
                     if self.autoCopyCheckbox.state == .on {
                         let pb = NSPasteboard.general
                         pb.clearContents()

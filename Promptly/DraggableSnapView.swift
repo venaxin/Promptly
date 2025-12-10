@@ -4,133 +4,116 @@ class DraggableSnapView: NSView {
 
     weak var delegate: BubbleDelegate?
 
-    private var dragOffset: NSPoint = .zero
-    private var initialMouseDownLocation: NSPoint = .zero
     private var isDragging = false
+    private var dragStartLocation: NSPoint = .zero
 
-    // MARK: - Mouse Events
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        NSColor.systemBlue.setFill()
+        let path = NSBezierPath(ovalIn: bounds)
+        path.fill()
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.boldSystemFont(ofSize: 24),
+            .paragraphStyle: paragraph
+        ]
+
+        let text = "P" as NSString
+        let textSize = text.size(withAttributes: attrs)
+        let textRect = NSRect(
+            x: (bounds.width - textSize.width) / 2,
+            y: (bounds.height - textSize.height) / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+        text.draw(in: textRect, withAttributes: attrs)
+    }
+
+    // MARK: - Mouse events
 
     override func mouseDown(with event: NSEvent) {
         guard let window = self.window else { return }
 
         isDragging = false
+        dragStartLocation = window.convertPoint(toScreen: event.locationInWindow)
 
-        let mouseLocation = NSEvent.mouseLocation
-        initialMouseDownLocation = mouseLocation
-
-        let windowOrigin = window.frame.origin
-        dragOffset = NSPoint(
-            x: mouseLocation.x - windowOrigin.x,
-            y: mouseLocation.y - windowOrigin.y
-        )
+//        delegate?.bubbleDragStarted()
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let window = self.window,
               let screen = window.screen else { return }
 
-        let currentLocation = NSEvent.mouseLocation
-        let dx = currentLocation.x - initialMouseDownLocation.x
-        let dy = currentLocation.y - initialMouseDownLocation.y
+        let currentLocation = window.convertPoint(toScreen: event.locationInWindow)
+        let deltaX = currentLocation.x - dragStartLocation.x
+        let deltaY = currentLocation.y - dragStartLocation.y
 
-        if !isDragging && (abs(dx) > 3 || abs(dy) > 3) {
-            isDragging = true
-            delegate?.bubbleDragStarted()
+        if abs(deltaX) > 1 || abs(deltaY) > 1 {
+            if !isDragging {
+                isDragging = true
+                delegate?.bubbleDragStarted()   // now we hide chat only when a real drag begins
+            }
         }
 
-        guard isDragging else { return }
-
-        let screenFrame = screen.visibleFrame
-
-        var newOrigin = currentLocation
-        newOrigin.x -= dragOffset.x
-        newOrigin.y -= dragOffset.y
-
         var frame = window.frame
-        frame.origin = newOrigin
+        frame.origin.x += deltaX
+        frame.origin.y += deltaY
 
-        // Keep the bubble entirely on screen.
-        if frame.minX < screenFrame.minX { frame.origin.x = screenFrame.minX }
-        if frame.maxX > screenFrame.maxX { frame.origin.x = screenFrame.maxX - frame.width }
-        if frame.minY < screenFrame.minY { frame.origin.y = screenFrame.minY }
-        if frame.maxY > screenFrame.maxY { frame.origin.y = screenFrame.maxY - frame.height }
+        let visibleFrame = screen.visibleFrame
+        let clampedX = max(visibleFrame.minX, min(frame.origin.x, visibleFrame.maxX - frame.size.width))
+        let clampedY = max(visibleFrame.minY, min(frame.origin.y, visibleFrame.maxY - frame.size.height))
 
+        frame.origin = NSPoint(x: clampedX, y: clampedY)
         window.setFrame(frame, display: true)
+
+        dragStartLocation = currentLocation
     }
 
     override func mouseUp(with event: NSEvent) {
+        guard let window = self.window,
+              let screen = window.screen else { return }
+
         if isDragging {
-            isDragging = false
-            snapToNearestEdge()
+            snapWindowToNearestEdge(window: window, screen: screen)
             delegate?.bubbleDragEnded()
         } else {
-            // Click, not drag.
             delegate?.bubbleClicked()
         }
     }
 
-    // MARK: - Edge Snap
+    // MARK: - Snapping
 
-    private func snapToNearestEdge() {
-        guard let window = self.window,
-              let screen = window.screen else { return }
-
-        let screenFrame = screen.visibleFrame
-        var frame = window.frame
+    private func snapWindowToNearestEdge(window: NSWindow, screen: NSScreen) {
+        let frame = window.frame
+        let visibleFrame = screen.visibleFrame
 
         let centerX = frame.midX
         let centerY = frame.midY
 
-        let distLeft   = abs(centerX - screenFrame.minX)
-        let distRight  = abs(screenFrame.maxX - centerX)
-        let distBottom = abs(centerY - screenFrame.minY)
-        let distTop    = abs(screenFrame.maxY - centerY)
+        let distLeft   = abs(centerX - visibleFrame.minX)
+        let distRight  = abs(visibleFrame.maxX - centerX)
+        let distBottom = abs(centerY - visibleFrame.minY)
+        let distTop    = abs(visibleFrame.maxY - centerY)
 
         let minDist = min(distLeft, distRight, distBottom, distTop)
 
+        var newOrigin = frame.origin
+
         if minDist == distLeft {
-            frame.origin.x = screenFrame.minX
+            newOrigin.x = visibleFrame.minX
         } else if minDist == distRight {
-            frame.origin.x = screenFrame.maxX - frame.width
+            newOrigin.x = visibleFrame.maxX - frame.width
         } else if minDist == distBottom {
-            frame.origin.y = screenFrame.minY
+            newOrigin.y = visibleFrame.minY
         } else {
-            frame.origin.y = screenFrame.maxY - frame.height
+            newOrigin.y = visibleFrame.maxY - frame.height
         }
 
-        window.animator().setFrame(frame, display: true)
-    }
-
-    // MARK: - Drawing (bubble only)
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        let diameter: CGFloat = 52
-        let bubbleRect = NSRect(
-            x: bounds.midX - diameter / 2,
-            y: bounds.midY - diameter / 2,
-            width: diameter,
-            height: diameter
-        )
-
-        NSColor.systemBlue.setFill()
-        let path = NSBezierPath(ovalIn: bubbleRect)
-        path.fill()
-
-        let text = "P"
-        let attributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 24, weight: .semibold)
-        ]
-
-        let size = text.size(withAttributes: attributes)
-        let textRect = NSRect(
-            x: bubbleRect.midX - size.width / 2,
-            y: bubbleRect.midY - size.height / 2,
-            width: size.width,
-            height: size.height
-        )
-        text.draw(in: textRect, withAttributes: attributes)
+        window.setFrameOrigin(newOrigin)
     }
 }

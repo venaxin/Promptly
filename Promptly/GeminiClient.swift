@@ -49,7 +49,7 @@ struct GeminiClient {
         case "Detailed":
             styleInstruction = "Expand structure and clarify assumptions; prefer detailed bullet points and explicit constraints."
         case "Code Helper":
-            styleInstruction = "Optimize the prompt for coding help (e.g. Python/Swift/TypeScript). Emphasize examples, edge cases, and clear input/output expectations."
+            styleInstruction = "Optimize the prompt for coding help. Emphasize examples, edge cases, and clear input/output expectations."
         default:
             styleInstruction = "Use a neutral, clear style that balances structure and brevity."
         }
@@ -97,7 +97,7 @@ struct GeminiClient {
                 return
             }
 
-            // Optional debug log
+            // Debug log
             if let debugString = String(data: data, encoding: .utf8) {
                 print("Gemini raw response:\n\(debugString)")
             }
@@ -109,11 +109,26 @@ struct GeminiClient {
                     return
                 }
 
-                if let errorDict = json["error"] as? [String: Any],
-                   let message = errorDict["message"] as? String {
+                // API error
+                if let errorDict = json["error"] as? [String: Any] {
+                    let code = errorDict["code"] as? Int ?? 0
+                    let status = errorDict["status"] as? String ?? ""
+                    let message = errorDict["message"] as? String ?? "Unknown Gemini API error."
+
+                    if code == 503 || status == "UNAVAILABLE" {
+                        let friendly = "Gemini is currently overloaded. Your request is fine — just try again in a bit."
+                        let apiError = NSError(
+                            domain: "GeminiAPI",
+                            code: code,
+                            userInfo: [NSLocalizedDescriptionKey: friendly]
+                        )
+                        completion(.failure(apiError))
+                        return
+                    }
+
                     let apiError = NSError(
                         domain: "GeminiAPI",
-                        code: 1,
+                        code: code,
                         userInfo: [NSLocalizedDescriptionKey: message]
                     )
                     completion(.failure(apiError))

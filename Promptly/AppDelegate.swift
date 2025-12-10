@@ -10,7 +10,8 @@ protocol BubbleDelegate: AnyObject {
 class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
 
     var bubbleWindow: NSPanel!
-    var chatPanel: ChatPanelWindow?    // ⬅️ use subclass
+    var chatPanel: ChatPanelWindow?
+    var statusItem: NSStatusItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let screen = NSScreen.main else { return }
@@ -24,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
 
         let windowRect = NSRect(origin: origin, size: bubbleSize)
 
+        // Bubble = non-activating overlay panel
         bubbleWindow = NSPanel(
             contentRect: windowRect,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -35,7 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         bubbleWindow.backgroundColor = .clear
         bubbleWindow.hasShadow = true
 
-        // Sits above normal app windows, including most full-screen content
+        // Above normal app windows, including fullscreen
         bubbleWindow.level = .statusBar
 
         // Show on all Spaces and with fullscreen apps
@@ -55,17 +57,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
 
         bubbleWindow.orderFrontRegardless()
 
-        // Listen for Space changes so we can bring it forward again
+        // Keep windows visible across Space changes
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(activeSpaceDidChange),
             name: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil
         )
+
+        // Status bar item (menu bar icon)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            if let image = NSImage(systemSymbolName: "p.circle.fill", accessibilityDescription: "Promptly") {
+                button.image = image
+            } else {
+                button.title = "P"
+            }
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Keep app running even if no normal windows
         false
+    }
+
+    // MARK: - Status item
+
+    @objc private func statusItemClicked(_ sender: Any?) {
+        toggleChatPanel()
     }
 
     // MARK: - BubbleDelegate
@@ -75,12 +96,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
     }
 
     func bubbleDragStarted() {
-        // Hide chat while dragging so it doesn't float awkwardly.
         hideChatPanel()
     }
 
     func bubbleDragEnded() {
-        // If you ever want chat to re-open after drag, you could handle it here.
+        // no-op
     }
 
     // MARK: - Chat Panel Management
@@ -88,9 +108,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
     private func ensureChatPanel() {
         if chatPanel != nil { return }
 
-        let panelSize = NSSize(width: 380, height: 220)
+        let panelSize = NSSize(width: 320, height: 260)
 
-        // Using ChatPanelWindow, KEEP .nonactivatingPanel so visibility stays as you liked
+        // Chat panel: NSPanel subclass that can become key, but still non-activating style
         chatPanel = ChatPanelWindow(
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -124,17 +144,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         if chatPanel.isVisible {
             hideChatPanel()
         } else {
-            // 1) Bring Promptly to front on the current Space/fullscreen
+            // Bring Promptly to the front in current Space
             NSApp.activate(ignoringOtherApps: true)
 
-            // 2) Position the panel next to the bubble
             positionChatPanel()
-
-            // 3) Show and make it key
             chatPanel.orderFrontRegardless()
             chatPanel.makeKeyAndOrderFront(nil)
 
-            // 4) Focus the input text view (now allowed because of ChatPanelWindow overrides)
             if let view = chatPanel.contentView as? ChatPanelView {
                 chatPanel.makeFirstResponder(view.inputTextView)
             }
@@ -145,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         chatPanel?.orderOut(nil)
     }
 
-    // MARK: - Adaptive Positioning
+    // MARK: - Positioning relative to bubble
 
     private func positionChatPanel() {
         guard let chatPanel = chatPanel,
@@ -155,7 +171,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         let bubbleFrame = bubbleWindow.frame
         let panelSize = chatPanel.frame.size
 
-        // Decide which edge the bubble is closest to (same logic as snap).
         let centerX = bubbleFrame.midX
         let centerY = bubbleFrame.midY
 
@@ -170,24 +185,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         let padding: CGFloat = 8
 
         if minDist == distRight {
-            // Bubble is on the right edge -> open panel to the LEFT of the bubble.
+            // Bubble on right edge → panel to the left
             panelOrigin.x = bubbleFrame.minX - panelSize.width - padding
-            panelOrigin.y = bubbleFrame.maxY - panelSize.height   // align tops
+            panelOrigin.y = bubbleFrame.maxY - panelSize.height
         } else if minDist == distLeft {
-            // Bubble on left edge -> panel to the RIGHT.
+            // Bubble on left edge → panel to the right
             panelOrigin.x = bubbleFrame.maxX + padding
             panelOrigin.y = bubbleFrame.maxY - panelSize.height
         } else if minDist == distTop {
-            // Bubble at top -> panel BELOW the bubble.
+            // Bubble on top → panel below
             panelOrigin.y = bubbleFrame.minY - panelSize.height - padding
-            panelOrigin.x = bubbleFrame.maxX - panelSize.width    // align right
+            panelOrigin.x = bubbleFrame.maxX - panelSize.width
         } else {
-            // Bubble at bottom -> panel ABOVE the bubble.
+            // Bubble on bottom → panel above
             panelOrigin.y = bubbleFrame.maxY + padding
-            panelOrigin.x = bubbleFrame.maxX - panelSize.width    // align right
+            panelOrigin.x = bubbleFrame.maxX - panelSize.width
         }
 
-        // Keep panel inside screen bounds (optional but nice).
+        // Keep panel inside screen bounds
         if panelOrigin.x < screenFrame.minX {
             panelOrigin.x = screenFrame.minX + padding
         }
@@ -205,14 +220,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
         chatPanel.setFrame(newFrame, display: true, animate: true)
     }
 
+    // MARK: - Spaces change
+
     @objc private func activeSpaceDidChange(_ notification: Notification) {
         // Keep bubble always on top
         bubbleWindow?.orderFrontRegardless()
 
-        // Only bring chat panel forward if it’s currently visible
+        // Only bring chat panel forward if it's visible
         if let panel = chatPanel, panel.isVisible {
             panel.orderFrontRegardless()
         }
     }
-
 }
