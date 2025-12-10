@@ -19,7 +19,7 @@ enum GeminiError: Error, LocalizedError {
 
 struct GeminiClient {
 
-    let model: String = "gemini-2.5-flash"   // change to whatever you like
+    let model: String = "gemini-2.5-flash"   // adjust if you're using a different model
 
     func improvePrompt(raw: String, completion: @escaping (Result<String, Error>) -> Void) {
         guard let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"],
@@ -80,10 +80,34 @@ struct GeminiClient {
                 return
             }
 
+            // 🔍 Debug log: see the raw response in Xcode console
+            if let debugString = String(data: data, encoding: .utf8) {
+                print("Gemini raw response:\n\(debugString)")
+            } else {
+                print("Gemini raw response: <non-UTF8 data, length=\(data.count)>")
+            }
+
             do {
                 let jsonAny = try JSONSerialization.jsonObject(with: data, options: [])
-                guard let json = jsonAny as? [String: Any],
-                      let candidates = json["candidates"] as? [[String: Any]] else {
+                guard let json = jsonAny as? [String: Any] else {
+                    completion(.failure(GeminiError.badResponse))
+                    return
+                }
+
+                // 1) If there is an "error" object, surface that message
+                if let errorDict = json["error"] as? [String: Any],
+                   let message = errorDict["message"] as? String {
+                    let apiError = NSError(
+                        domain: "GeminiAPI",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: message]
+                    )
+                    completion(.failure(apiError))
+                    return
+                }
+
+                // 2) Normal success path: parse candidates → content → parts → text
+                guard let candidates = json["candidates"] as? [[String: Any]] else {
                     completion(.failure(GeminiError.badResponse))
                     return
                 }
