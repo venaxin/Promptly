@@ -10,6 +10,8 @@ import Cocoa
 
 class ManageStylesView: NSView {
 
+    var onClose: (() -> Void)?
+
     private let stylesPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let nameField = NSTextField(string: "")
     private let originalTextView = NSTextView()
@@ -67,6 +69,20 @@ class ManageStylesView: NSView {
 
         stylesPopup.translatesAutoresizingMaskIntoConstraints = false
         reloadStylesPopup()
+        
+        let closeButton = NSButton(title: "✕", target: self, action: #selector(closeTapped))
+        closeButton.bezelStyle = .inline
+        closeButton.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        closeButton.isBordered = false
+        if #available(macOS 10.14, *) {
+            closeButton.contentTintColor = .systemRed
+        } else {
+            closeButton.attributedTitle = NSAttributedString(
+                string: "✕",
+                attributes: [.foregroundColor: NSColor.red]
+            )
+        }
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
 
         addButton.bezelStyle = .rounded
         addButton.translatesAutoresizingMaskIntoConstraints = false
@@ -102,6 +118,7 @@ class ManageStylesView: NSView {
         stylesPopup.action = #selector(styleSelectionChanged(_:))
 
         addSubview(stylesPopup)
+        addSubview(closeButton)
         addSubview(addButton)
         addSubview(removeButton)
         addSubview(nameField)
@@ -115,6 +132,10 @@ class ManageStylesView: NSView {
         NSLayoutConstraint.activate([
             stylesPopup.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             stylesPopup.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            stylesPopup.trailingAnchor.constraint(lessThanOrEqualTo: closeButton.leadingAnchor, constant: -8),
+
+            closeButton.centerYAnchor.constraint(equalTo: stylesPopup.centerYAnchor),
+            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
 
             addButton.centerYAnchor.constraint(equalTo: stylesPopup.centerYAnchor),
             addButton.leadingAnchor.constraint(equalTo: stylesPopup.trailingAnchor, constant: 6),
@@ -193,6 +214,11 @@ class ManageStylesView: NSView {
         improvedTextView.string = ""
     }
 
+    @objc private func closeTapped() {
+        onClose?()
+    }
+
+    
     @objc private func styleSelectionChanged(_ sender: NSPopUpButton) {
         loadSelectedStyle()
     }

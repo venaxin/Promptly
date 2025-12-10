@@ -253,7 +253,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate, NSWindowDele
 
         let view = ManageStylesView(frame: NSRect(origin: .zero, size: size))
         view.wantsLayer = true
+        view.onClose = { [weak self] in
+            self?.stylesWindow?.orderOut(nil)
+        }
         stylesWindow.contentView = view
+
     }
 
     private func showStylesWindow() {

@@ -51,6 +51,10 @@ class PromptStyleManager {
                 PromptStyle(
                     name: "Code Helper",
                     instruction: "Optimize the prompt for coding help. Emphasize clear input/output expectations, examples, edge cases, and any specific libraries, versions, or platforms involved."
+                ),
+                PromptStyle(
+                    name:"Comments Update",
+                    instruction: "Your task is to revise or add comments to the provided code.                    Adhere to the following strict rules for all comments: *   **Single-Line Format:** Ensure each comment exists on a single line. Avoid multi-line comment blocks.   *   **Lowercase Only:** All comment text must be in lowercase.    *   **No Emojis:** Do not include any emojis in the comments.    *   **Simple, Formal English:** Use straightforward, formal language.   *   **Concise and Explanatory:** Be concise while clearly explaining the code's function. For example, instead of 'this function initializes the connection,' write 'initializes connection.'  *   **Plain Language Sectioning:** If sectioning is necessary, use simple words or phrases rather than special characters like `----`.   *   **Code Immutability:** Do not alter any part of the original code. Only comments can be edited or added."
                 )
             ]
             save()
