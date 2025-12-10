@@ -206,8 +206,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate {
     }
 
     @objc private func activeSpaceDidChange(_ notification: Notification) {
-        // Re-order the bubble (and chat panel if visible) to the front on the new Space
+        // Keep bubble always on top
         bubbleWindow?.orderFrontRegardless()
-        chatPanel?.orderFrontRegardless()
+
+        // Only bring chat panel forward if it’s currently visible
+        if let panel = chatPanel, panel.isVisible {
+            panel.orderFrontRegardless()
+        }
     }
+
 }
