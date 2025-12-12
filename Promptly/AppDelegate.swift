@@ -69,8 +69,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate, NSWindowDele
         if let button = statusItem.button {
             button.image = nil
             button.title = "P"
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 60
+            button.layer?.masksToBounds = true
             button.target = self
             button.action = #selector(statusItemClicked(_:))
+        }
+
+        if let dockIcon = NSImage(named: "AppIcon") ?? NSImage(named: "PromptStatusIcon") {
+            NSApp.applicationIconImage = dockIcon
         }
     }
 
