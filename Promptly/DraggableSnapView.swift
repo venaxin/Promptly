@@ -6,32 +6,37 @@ class DraggableSnapView: NSView {
 
     private var isDragging = false
     private var dragStartLocation: NSPoint = .zero
+    private let bubbleImage = NSImage(named: "PromptStatusIcon")
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        NSColor.systemBlue.setFill()
-        let path = NSBezierPath(ovalIn: bounds)
-        path.fill()
+        if let bubbleImage = bubbleImage {
+            bubbleImage.draw(in: bounds)
+        } else {
+            NSColor.systemBlue.setFill()
+            let path = NSBezierPath(ovalIn: bounds)
+            path.fill()
 
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
 
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.boldSystemFont(ofSize: 24),
-            .paragraphStyle: paragraph
-        ]
+            let attrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.white,
+                .font: NSFont.boldSystemFont(ofSize: 24),
+                .paragraphStyle: paragraph
+            ]
 
-        let text = "P" as NSString
-        let textSize = text.size(withAttributes: attrs)
-        let textRect = NSRect(
-            x: (bounds.width - textSize.width) / 2,
-            y: (bounds.height - textSize.height) / 2,
-            width: textSize.width,
-            height: textSize.height
-        )
-        text.draw(in: textRect, withAttributes: attrs)
+            let text = "P" as NSString
+            let textSize = text.size(withAttributes: attrs)
+            let textRect = NSRect(
+                x: (bounds.width - textSize.width) / 2,
+                y: (bounds.height - textSize.height) / 2,
+                width: textSize.width,
+                height: textSize.height
+            )
+            text.draw(in: textRect, withAttributes: attrs)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {

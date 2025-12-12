@@ -67,11 +67,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, BubbleDelegate, NSWindowDele
         // Status bar item (menu bar icon)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            if let image = NSImage(systemSymbolName: "p.circle.fill", accessibilityDescription: "Promptly") {
-                button.image = image
-            } else {
-                button.title = "P"
-            }
+            button.image = nil
+            button.title = "P"
             button.target = self
             button.action = #selector(statusItemClicked(_:))
         }
