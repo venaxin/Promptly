@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B446C6FB2EEB0ED70087E97A /* Readme.md in Sources */ = {isa = PBXBuildFile; fileRef = B446C6FA2EEB0ECC0087E97A /* Readme.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		B446C6FA2EEB0ECC0087E97A /* Readme.md */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Readme.md; sourceTree = "<group>"; };
 		B48020102EE3EAFD006C87A4 /* Promptly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Promptly.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -32,6 +37,7 @@
 		B48020072EE3EAFD006C87A4 = {
 			isa = PBXGroup;
 			children = (
+				B446C6FA2EEB0ECC0087E97A /* Readme.md */,
 				B48020122EE3EAFD006C87A4 /* Promptly */,
 				B48020112EE3EAFD006C87A4 /* Products */,
 			);
@@ -119,6 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B446C6FB2EEB0ED70087E97A /* Readme.md in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
